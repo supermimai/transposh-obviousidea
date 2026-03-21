@@ -4,6 +4,13 @@
 
 ## Description
 
+March 2026 - Let me introduce a fork of the project, it has been vibe coded to add some features and a native support for Bing translation API. 
+you will need a Bing API, but there is a free tiers. 
+
+This new version also improved some compatibility for SEO, such href-xdefault.
+
+A new tab in plugin setting will let you define some words and sentence to never been translated ( such a product name : eg. Light Image Resizer ) 
+
 The Transposh translation filter for WordPress offers a powerful hybrid approach to blog translation. It seamlessly combines automatic translation with human-powered corrections, allowing your users to improve translations directly on your site using an intuitive in-context interface.
 
 [![YouTube Video](http://img.youtube.com/vi/hN0WppbhoFQ/0.jpg)](http://www.youtube.com/watch?v=hN0WppbhoFQ)
