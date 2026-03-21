@@ -90,6 +90,25 @@ You can find them on our site [here](https://transposh.org/faq)
 <details open>
 <summary>
 
+### 2026/03/21 - 1.0.14
+</summary>
+
+- Fixed Bing source language fallback to use the site's default language instead of always forcing English
+</details>
+
+<details>
+<summary>
+
+### 2026/03/20 - 1.0.13
+</summary>
+
+- Switched Bing translations to the official Microsoft Translator API
+- Added configurable Microsoft Translator key, region, and endpoint settings
+</details>
+
+<details>
+<summary>
+
 ### 2025/09/18 - 1.0.11
 </summary>
 
