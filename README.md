@@ -4,18 +4,22 @@
 
 ## Description
 
-March 2026 - Let me introduce a fork of the project, it has been vibe coded to add some features and a native support for Bing translation API. 
-you will need a Bing API, but there is a free tiers. 
+This fork extends Transposh with practical improvements for modern multilingual WordPress sites.
 
-This new version also improved some compatibility for SEO, such href-xdefault.
+Highlights of this fork:
 
-A new tab in plugin setting will let you define some words and sentence to never been translated ( such a product name : eg. Light Image Resizer ) 
+- Native support for the official Microsoft Translator API for Bing translations
+- Ollama support for manual translation review, with configurable endpoint, API key, model, and prompt template
+- An Ollama connectivity check directly from the admin interface
+- SEO improvements, including `hreflang="x-default"`
+- A Protected Terms tab to preserve product names and brand names from translation
+- A fix for Bing source language handling so translation starts from the site's real default language instead of always assuming English
 
-The Transposh translation filter for WordPress offers a powerful hybrid approach to blog translation. It seamlessly combines automatic translation with human-powered corrections, allowing your users to improve translations directly on your site using an intuitive in-context interface.
+The Transposh translation filter for WordPress offers a hybrid approach to website translation. It combines automatic translation with human review, allowing translations to be corrected directly on the site through an in-context interface.
 
 [![YouTube Video](http://img.youtube.com/vi/hN0WppbhoFQ/0.jpg)](http://www.youtube.com/watch?v=hN0WppbhoFQ)
 
-You can watch the video above, made by Fabrice Meuwissen of obviousidea.com which describes basic usage of Transposh, more videos can be found in the changelog
+The video above, produced by Fabrice Meuwissen of obviousidea.com, presents the basic usage of Transposh.
 
 ## Key Features
 
@@ -24,7 +28,7 @@ You can watch the video above, made by Fabrice Meuwissen of obviousidea.com whic
 - **Flexible Widget Options:** Choose from multiple widget appearances, with pluggable widgets and support for multiple instances.
 - **Seamless Plugin Integration:** Translates content from external plugins without the need for .po/.mo files.
 - **Automatic Translation Mode:** Instantly translates all content, including comments.
-- **Multiple Translation Backends:** Use either Google, Bing, Yandex, Baidu, Apertium, or LibreTranslate translation services.
+- **Multiple Translation Backends:** Use Google, Bing / Microsoft Translator, Yandex, Baidu, Apertium, LibreTranslate, and manual Ollama-assisted review workflows.
 - **User-Triggered Translation:** Automatic translation can be triggered on demand by readers or on the server side.
 - **RSS Feed Translation:** Your RSS feeds are translated as well.
 - **Full Content Translation:** Handles hidden elements, link tags, meta content, and titles.
@@ -34,13 +38,13 @@ You can watch the video above, made by Fabrice Meuwissen of obviousidea.com whic
 ## Our Goals
 
 - **Performance:** Built for speed by leveraging memory caching for lightning-fast translations.
-- **Support:** We'll implement it if you want it; just visit our [development site](https://github.com/oferwald/transposh/ "ticket system")
+- **Support:** The upstream project remains available at [oferwald/transposh](https://github.com/oferwald/transposh), while this fork focuses on practical production-oriented improvements.
 - **Security:** We have externally audited the plugin for improved security.
 - **Ease of Use:** We make translation as fun and as easy as possible.
 - **Flexibility:** We give you full control over the user experience.
 - **SEO:** We increase your search engine exposure.
 
-Technology has been thoroughly tested on a large dynamic site with millions of monthly page views. Feel free to visit [Colnect](https://colnect.com "website for collectors"), the best site for collectors.
+The underlying project has been tested on large production websites with heavy traffic and dynamic content.
 
 ## Installation
 
@@ -104,6 +108,13 @@ You can find them on our site [here](https://transposh.org/faq)
 
 - Switched Bing translations to the official Microsoft Translator API
 - Added configurable Microsoft Translator key, region, and endpoint settings
+- Added Ollama support for manual translation review
+- Added configurable Ollama endpoint, API key, model, and prompt template
+- Added an Ollama connectivity check in the admin interface
+- Added a Protected Terms tab to preserve brand names and product names during translation
+- Added `hreflang="x-default"` output for improved multilingual SEO
+- Fixed Bing manual suggestion decoding in phrase-by-phrase review
+- Improved asset versioning for translation editor scripts and styles
 </details>
 
 <details>
