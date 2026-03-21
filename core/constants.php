@@ -1881,7 +1881,7 @@ class transposh_consts {
 define('TRANSLATOR', 'translator');
 
 //Define for transposh plugin version
-define('TRANSPOSH_PLUGIN_VER', '%VERSION%');
+define('TRANSPOSH_PLUGIN_VER', '1.0.14');
 
 //Current jQuery UI
 define('JQUERYUI_VER', '1.14.1');

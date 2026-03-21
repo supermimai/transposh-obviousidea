@@ -401,8 +401,26 @@ class transposh_translate
     }
 
     /******************************************
-     * Proxied translation for Bing translate
+     * Microsoft Translator (official API)
      *****************************************/
+
+    private static function getMicrosoftTranslatorConfig(): array {
+        global $my_transposh_plugin;
+
+        $key = trim((string)$my_transposh_plugin->options->msn_key);
+        $region = trim((string)$my_transposh_plugin->options->msn_region);
+        $endpoint = trim((string)$my_transposh_plugin->options->msn_endpoint);
+
+        if ($endpoint === '') {
+            $endpoint = 'https://api.cognitive.microsofttranslator.com';
+        }
+
+        return array(
+            'key' => $key,
+            'region' => $region,
+            'endpoint' => rtrim($endpoint, '/')
+        );
+    }
 
     public static function getBingTranslatorTokens() {
         if (get_option(TRANSPOSH_OPTIONS_BINGPROXY, array())) {
@@ -438,50 +456,82 @@ class transposh_translate
     public static function get_bing_translation($tl, $sl, $q)
     {
         $q_was_array = is_array($q);
-        $tokens = transposh_translate::getBingTranslatorTokens();
-        if (empty($tokens['IG']) || empty($tokens['IID']) || empty($tokens['key']) || empty($tokens['token'])) {
-            tp_logger("Error: Unable to retrieve necessary tokens.",1);
+        $config = self::getMicrosoftTranslatorConfig();
+        if ($config['key'] === '') {
+            tp_logger("Error: Microsoft Translator API key is missing.", 1);
+            return false;
         }
 
-        $url = "https://www.bing.com/ttranslatev3?isVertical=1&&IG={$tokens['IG']}&IID={$tokens['IID']}";
         $tl = transposh_consts::get_engine_lang_code($tl, 'b');
-        if (is_array($q)) {
-            $q = json_encode(array_map('urldecode', $q), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!$tl) {
+            tp_logger("Error: Unsupported Microsoft Translator target language.", 1);
+            return false;
         }
-        $postData = [
-            'fromLang' => $sl,
-            'text' => $q,
-            'to' => $tl,
-            'token' => $tokens['token'],
-            'key' => $tokens['key']
-        ];
+
+        $source_lang = '';
+        if ($sl) {
+            $source_lang = transposh_consts::get_engine_lang_code($sl, 'b');
+        }
+
+        $query_args = array('api-version=3.0', 'to=' . rawurlencode($tl));
+        if ($source_lang) {
+            $query_args[] = 'from=' . rawurlencode($source_lang);
+        }
+        $url = $config['endpoint'] . '/translate?' . implode('&', $query_args);
+
+        if ($q_was_array) {
+            $request_body = array_map(function ($item) {
+                return array('Text' => urldecode($item));
+            }, $q);
+        } else {
+            $request_body = array(array('Text' => $q));
+        }
+
+        $headers = array(
+            'Content-Type: application/json',
+            'Ocp-Apim-Subscription-Key: ' . $config['key']
+        );
+        if ($config['region'] !== '') {
+            $headers[] = 'Ocp-Apim-Subscription-Region: ' . $config['region'];
+        }
 
         $response = self::executeCurlRequest(
             $url,
             [
                 CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => http_build_query($postData)
+                CURLOPT_POSTFIELDS => wp_json_encode($request_body)
             ],
-            [
-                "Content-Type: application/x-www-form-urlencoded"
-            ]
+            $headers
         );
         if ($response === false) {
-            tp_logger("Error: Bing cURL or HTTP error.", 1);
+            tp_logger("Error: Microsoft Translator cURL or HTTP error.", 1);
             return false;
         }
-        tp_logger("Bing response: $response", 3);
+        tp_logger("Microsoft Translator response: $response", 3);
         $data = json_decode($response, true);
-        // tp_logger($data,1);
-        if (isset($data[0]['translations'][0]['text'])) {
-            if ($q_was_array) {
-                tp_logger(json_decode($data[0]['translations'][0]['text'], true));
-                return json_decode($data[0]['translations'][0]['text'], true);
-            }
-            return $data[0]['translations'][0]['text'];
-        } else {
-            tp_logger("Error: Unable to parse translation response.");
+
+        if (!is_array($data) || empty($data)) {
+            tp_logger("Error: Unable to parse Microsoft Translator response.", 1);
+            return false;
         }
+
+        if ($q_was_array) {
+            $result = array();
+            foreach ($data as $item) {
+                if (!isset($item['translations'][0]['text'])) {
+                    tp_logger("Error: Missing translated item in Microsoft Translator batch response.", 1);
+                    return false;
+                }
+                $result[] = $item['translations'][0]['text'];
+            }
+            return $result;
+        }
+
+        if (isset($data[0]['translations'][0]['text'])) {
+            return $data[0]['translations'][0]['text'];
+        }
+
+        tp_logger("Error: Unable to parse Microsoft Translator response.", 1);
         return false;
     }
 

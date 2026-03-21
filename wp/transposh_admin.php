@@ -177,6 +177,8 @@ class transposh_plugin_admin {
                 $this->transposh->options->enable_autotranslate = TP_FROM_POST;
                 $this->transposh->options->enable_autoposttranslate = TP_FROM_POST;
                 $this->transposh->options->msn_key = TP_FROM_POST;
+                $this->transposh->options->msn_region = TP_FROM_POST;
+                $this->transposh->options->msn_endpoint = TP_FROM_POST;
                 $this->transposh->options->google_key = TP_FROM_POST;
                 $this->transposh->options->yandex_key = TP_FROM_POST;
                 $this->transposh->options->baidu_key = TP_FROM_POST;
@@ -698,8 +700,14 @@ Please note that while Transposh currently offers a hosted LibreTranslate servic
                 , __('Do automatic translation immediately after a post has been published', TRANSPOSH_TEXT_DOMAIN));
         // FIX! OLD
         $this->textinput($this->transposh->options->msn_key_o
-                , array('bing', __('MSN API key', TRANSPOSH_TEXT_DOMAIN))
+                , array('bing', __('Microsoft Translator API key', TRANSPOSH_TEXT_DOMAIN))
                 , __('API Key', TRANSPOSH_TEXT_DOMAIN), 35, 'keys');
+        $this->textinput($this->transposh->options->msn_region_o
+                , ''
+                , __('Region (optional for global endpoint)', TRANSPOSH_TEXT_DOMAIN), 35, 'keys');
+        $this->textinput($this->transposh->options->msn_endpoint_o
+                , ''
+                , __('Endpoint URL', TRANSPOSH_TEXT_DOMAIN), 100, 'keys');
         $this->textinput($this->transposh->options->google_key_o
                 , array('google', __('Google API key', TRANSPOSH_TEXT_DOMAIN))
                 , __('API Key', TRANSPOSH_TEXT_DOMAIN), 35, 'keys');

@@ -120,8 +120,12 @@ class transposh_option {
  * @property transposh_option $enable_autotranslate_o
  * @property boolean          $enable_autoposttranslate      Option to enable/disable auto translation of posts
  * @property transposh_option $enable_autoposttranslate_o
- * @property string           $msn_key                       Option to store the msn API key
+ * @property string           $msn_key                       Option to store the Microsoft Translator API key
  * @property transposh_option $msn_key_o
+ * @property string           $msn_region                    Option to store the Microsoft Translator API region
+ * @property transposh_option $msn_region_o
+ * @property string           $msn_endpoint                  Option to store the Microsoft Translator API endpoint
+ * @property transposh_option $msn_endpoint_o
  * @property string           $google_key                    Option to store the Google API key
  * @property transposh_option $google_key_o
  * @property string           $yandex_key                    Option to store the Yandex API key
@@ -258,6 +262,8 @@ class transposh_plugin_options {
         $this->register_option('enable_autotranslate', TP_OPT_BOOLEAN, 1);
         $this->register_option('enable_autoposttranslate', TP_OPT_BOOLEAN, 1);
         $this->register_option('msn_key', TP_OPT_STRING);
+        $this->register_option('msn_region', TP_OPT_STRING);
+        $this->register_option('msn_endpoint', TP_OPT_STRING);
         $this->register_option('google_key', TP_OPT_STRING);
         $this->register_option('yandex_key', TP_OPT_STRING);
         $this->register_option('baidu_key', TP_OPT_STRING);
