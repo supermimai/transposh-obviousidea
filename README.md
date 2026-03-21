@@ -46,6 +46,13 @@ The video above, produced by Fabrice Meuwissen of obviousidea.com, presents the 
 
 The underlying project has been tested on large production websites with heavy traffic and dynamic content.
 
+## Real-World Validation
+
+This fork is used and tested on real websites, including production-oriented validation on:
+
+- [ObviousIdea](https://www.obviousidea.com/)
+- [Light in the Eye](https://lightintheeye.com/en/)
+
 ## Installation
 
 1. Upload the plugin to the /wp-content/plugins/ directory.
