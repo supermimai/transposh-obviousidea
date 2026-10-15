@@ -24,6 +24,7 @@
         { id: 'yandex', l: 'y', click: () => getproxiedsuggestion('y'), n: 4 },
         { id: 'baidu', l: 'u', click: () => getproxiedsuggestion('u'), n: 5 },
         { id: 'libretranslate', l: 'l', click: () => getproxiedsuggestion('l'), n: 6 },
+        { id: 'ollama', l: 'o', click: () => getproxiedsuggestion('o'), n: 7 },
     ];
 
     // list of languages

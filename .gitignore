@@ -1,0 +1,4 @@
+node_modules/
+build/artifacts/
+*.local.*
+__pycache__/

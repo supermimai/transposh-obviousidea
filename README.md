@@ -55,6 +55,14 @@ This fork is used and tested on real websites, including production-oriented val
 
 ## Installation
 
+### Development candidate: WP Rocket and dictionary caching
+
+The development branch includes native WP Rocket language-page caching and
+translation-driven invalidation, plus isolated dictionary keys and batched
+Memcached prefetch. See [the mirror validation report](docs/cache-validation-2026-10-15.md)
+for source reconciliation, tests, local packaging instructions and limits.
+This candidate has not been released or deployed to production.
+
 1. Upload the plugin to the /wp-content/plugins/ directory.
 2. Activate the plugin from the **'Plugins'** menu in your WordPress dashboard.
 3. Go to the **'Widgets'** section and add the Transposh widget to your sidebar. Choose your preferred display interface.

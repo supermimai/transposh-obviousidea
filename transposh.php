@@ -368,6 +368,7 @@ class transposh_plugin {
             }
         }
         $start_time = microtime(TRUE);
+        $profile_queries = has_action('transposh_page_processed') ? $GLOBALS['wpdb']->num_queries : 0;
 
         // Refrain from touching the administrative interface and important pages
         if ($this->is_special_page(transposh_utils::get_clean_server_var('REQUEST_URI')) && !$this->attempt_json) {
@@ -427,6 +428,14 @@ class transposh_plugin {
             tp_logger('Translation completed in ' . ($end_time - $start_time) . ' seconds', 1);
         }
 
+        if (has_action('transposh_page_processed')) {
+            do_action('transposh_page_processed', array(
+                'language'=>$this->target_language,
+                'duration_ms'=>(microtime(TRUE)-$start_time)*1000,
+                'sql_queries'=>$GLOBALS['wpdb']->num_queries-$profile_queries,
+                'output_bytes'=>strlen($buffer)
+            ));
+        }
         return $buffer;
     }
 
@@ -621,7 +630,15 @@ class transposh_plugin {
         // we'll go into this code of redirection only if we have options that need it (and no bot is involved, for the non-cookie)
         //  and this is not a special page or one that is refered by our site
         // bots can skip this altogether
-        if (($this->options->enable_detect_redirect || $this->options->widget_allow_set_deflang || $this->options->enable_geoip_redirect) &&
+        // An explicit language in the URL wins over a remembered or detected
+        // preference. This must behave identically on cache hits and misses.
+        $requested_language = transposh_utils::get_language_from_url(transposh_utils::get_clean_server_var('REQUEST_URI'), $this->home_url);
+        $explicit_language = $requested_language && $this->options->is_active_language($requested_language);
+        $remembered_language = $this->options->widget_allow_set_deflang && isset($_COOKIE['TR_LNG'])
+                && is_string($_COOKIE['TR_LNG']) && $this->options->is_active_language($_COOKIE['TR_LNG']);
+        // Do not start a PHP session solely because the "remember language"
+        // widget is available: there must actually be a preference to apply.
+        if (!$explicit_language && ($this->options->enable_detect_redirect || $remembered_language || $this->options->enable_geoip_redirect) &&
                 !($this->is_special_page(transposh_utils::get_clean_server_var('REQUEST_URI')) || (transposh_utils::get_clean_server_var('HTTP_REFERER') != null && strpos(transposh_utils::get_clean_server_var('HTTP_REFERER'), $this->home_url) !== false)) &&
                 !(transposh_utils::is_bot())) {
             // we are starting a session if needed
@@ -910,25 +927,29 @@ class transposh_plugin {
         }
         $widget_args = $this->widget->create_widget_args($this->get_clean_url());
         tp_logger($widget_args, 4);
+        $default_url = '';
         // changes according to https://developers.google.com/search/docs/specialty/international/localized-versions
         foreach ($widget_args as $lang) {
-            // Only output all rels if target language is default, otherwise just the pair
-            if ($this->target_language == $this->options->default_language ||
-                $lang['isocode'] == $this->target_language ||
-                $lang['isocode'] == $this->options->default_language) {
-                echo '<link rel="alternate" hreflang="' . $lang['isocode'] . '" href="';
-                if ($this->options->full_rel_alternate) {
-                    $current_url = (is_ssl() ? 'https://' : 'http://') . transposh_utils::get_clean_server_var('HTTP_HOST') . transposh_utils::get_clean_server_var('REQUEST_URI');
-                    $url = transposh_utils::rewrite_url_lang_param($current_url, $this->home_url, $this->enable_permalinks_rewrite, $lang['isocode'], $this->edit_mode);
-                    if ($this->options->is_default_language($lang['isocode'])) {
-                        $url = transposh_utils::cleanup_url($url, $this->home_url);
-                    }
-                    echo $url;
-                } else {
-                    echo $lang['url'];
+            // Every language page advertises the same reciprocal alternate set.
+            echo '<link rel="alternate" hreflang="' . $lang['isocode'] . '" href="';
+            if ($this->options->full_rel_alternate) {
+                $current_url = (is_ssl() ? 'https://' : 'http://') . transposh_utils::get_clean_server_var('HTTP_HOST') . transposh_utils::get_clean_server_var('REQUEST_URI');
+                $url = transposh_utils::rewrite_url_lang_param($current_url, $this->home_url, $this->enable_permalinks_rewrite, $lang['isocode'], $this->edit_mode);
+                if ($this->options->is_default_language($lang['isocode'])) {
+                    $url = transposh_utils::cleanup_url($url, $this->home_url);
                 }
-                echo '"/>';
+                echo $url;
+            } else {
+                $url = $lang['url'];
+                echo $url;
             }
+            echo '"/>';
+            if ($this->options->is_default_language($lang['isocode'])) {
+                $default_url = $url;
+            }
+        }
+        if ($default_url) {
+            echo '<link rel="alternate" hreflang="x-default" href="' . $default_url . '"/>';
         }
     }
 
@@ -1471,6 +1492,11 @@ class transposh_plugin {
                     $source = 2;
                     $result = transposh_translate::get_bing_translation($tl, $sl, $q);
                     break;
+                case 'o': // ollama
+                    if (!$sl) $sl = $this->options->default_language;
+                    $source = 7;
+                    $result = transposh_translate::get_ollama_translation($tl, $sl, $q);
+                    break;
                 case 'a': // apertium
                     if (!$sl) $sl = 'en'; // setting default source language to english
                     $source = 3;
@@ -1553,8 +1579,12 @@ class transposh_plugin {
         // send out result
         // fix CVE-2021-24910
         if (isset($jsonout->result)) {
-            foreach ($jsonout->result as $key => $result) { // SOME BUG LURKS HERE (String?)
-                $jsonout->result[$key] = esc_html($result);
+            if (is_array($jsonout->result)) {
+                foreach ($jsonout->result as $key => $result) {
+                    $jsonout->result[$key] = esc_html($result);
+                }
+            } else {
+                $jsonout->result = esc_html($jsonout->result);
             }
         }
         echo json_encode($jsonout);

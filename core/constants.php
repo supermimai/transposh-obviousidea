@@ -1711,6 +1711,9 @@ class transposh_consts {
         'g' => array(
             'name' => 'Google',
         ),
+        'o' => array(
+            'name' => 'Ollama',
+        ),
         'u' => array(
             'name' => 'Baidu',
         ),
@@ -1810,6 +1813,9 @@ class transposh_consts {
      * @return bool - is language supported by engine?
      */
     public static function is_supported_engine($lang, $engine) {
+        if ($engine === 'o') {
+            return isset(self::$languages[$lang]);
+        }
         $overrides = get_option(TRANSPOSH_OPTIONS_LANGUAGE_OVERRIDES, array());
         if (isset($overrides[$lang]['engines'][$engine]) && $overrides[$lang]['engines'][$engine]['enabled'] === 1) {
             return true;
@@ -1823,6 +1829,9 @@ class transposh_consts {
      * @return string - conversion of this engine?
      */
     public static function get_engine_lang_code($lang, $engine) {
+        if ($engine === 'o') {
+            return $lang;
+        }
         $overrides = get_option(TRANSPOSH_OPTIONS_LANGUAGE_OVERRIDES, array());
         if (isset($overrides[$lang]['engines'][$engine]) && !empty($overrides[$lang]['engines'][$engine])) {
             return $overrides[$lang]['engines'][$engine] === 'y' ? $lang : $overrides[$lang]['engines'][$engine];
@@ -1838,6 +1847,9 @@ class transposh_consts {
      * @return array - all languages supported by engine
      */
     public static function get_engine_lang_codes($engine) {
+        if ($engine === 'o') {
+            return array_keys(self::$languages);
+        }
         $langs = [];
         foreach (self::$languages as $lang => $langrec) {
             if (isset($langrec['engines'][$engine])) {
