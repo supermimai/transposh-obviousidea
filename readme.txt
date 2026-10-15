@@ -13,6 +13,15 @@ Transposh translation filter for WordPress offers a unique approach to blog tran
 
 == Changelog ==
 
+= 1.0.15-rc1 (pre-release) =
+* Added native WP Rocket support for canonical language-prefixed singular pages.
+* Invalidate all affected-language pages after actual translation changes, including shared phrases and consent variants.
+* Isolate dictionary cache keys by site and generation without flushing shared cache services.
+* Fix parser prefetch maps and group Memcached reads in bounded batches.
+* Keep explicit URL languages deterministic and avoid unnecessary PHP sessions.
+* Reconcile Ollama, protected terms, reciprocal hreflang and scalar suggestion handling from the test mirror.
+* Add reproducible packaging and cache/provider regression checks. Validated on www2 only; no production deployment.
+
 = 1.0.14 =
 * Fixed Bing source language fallback to use the site's default language instead of always forcing English.
 

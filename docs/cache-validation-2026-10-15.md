@@ -3,8 +3,11 @@
 This is a development candidate for `supermimai/transposh-obviousidea`.
 Validation was performed on **www2.obviousidea.com only**, with WordPress 7.1.3,
 PHP 8.3.33 (Apache) and WP Rocket 3.23.5.1. No production deployment, shared
-OPcache reset, Cloudflare-zone change, release tag or published release is part
-of this work. The existing source version remains 1.0.14.
+OPcache reset or Cloudflare-zone change was part of validation. The original
+validated source snapshot displayed 1.0.14. The subsequent 1.0.15-rc1 package
+changes version metadata and release documentation, with the same runtime
+implementation. It is published separately as a GitHub pre-release; the stable
+readme tag stays 1.0.14 and production is unchanged.
 
 ## Source reconciliation
 
