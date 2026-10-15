@@ -62,6 +62,8 @@ translation-driven invalidation, plus isolated dictionary keys and batched
 Memcached prefetch. See [the mirror validation report](docs/cache-validation-2026-10-15.md)
 for source reconciliation, tests, local packaging instructions and limits.
 This candidate has not been released or deployed to production.
+An [installable candidate ZIP and checksums](packages/README.md) are available
+for testing; this is separate from a published GitHub release.
 
 1. Upload the plugin to the /wp-content/plugins/ directory.
 2. Activate the plugin from the **'Plugins'** menu in your WordPress dashboard.
