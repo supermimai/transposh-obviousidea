@@ -2,11 +2,11 @@
 
 /*
   Plugin Name: Transposh Translation Filter
-  Plugin URI: https://transposh.org/
-  Description: Translation filter for WordPress, After enabling please set languages at the <a href="admin.php?page=tp_main">the options page</a> Want to help? visit our development site at <a href="https://github.com/oferwald/transposh">github</a>.
-  Author: Team Transposh
+  Plugin URI: https://github.com/supermimai/transposh-obviousidea
+  Description: Translation filter for WordPress. ObviousIdea fork, based on <a href="https://transposh.org/">Transposh</a> by Team Transposh. Configure languages on the <a href="admin.php?page=tp_main">settings page</a>. Development and issues: <a href="https://github.com/supermimai/transposh-obviousidea">GitHub</a>.
+  Author: Team Transposh and ObviousIdea
   Version: 1.0.15-rc1
-  Author URI: https://transposh.org/
+  Author URI: https://github.com/supermimai/transposh-obviousidea
   License: GPL (https://www.gnu.org/licenses/gpl.txt)
   Text Domain: transposh
   Domain Path: /langs
