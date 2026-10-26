@@ -48,6 +48,7 @@ class transposh_plugin_admin {
         add_action('wp_ajax_tp_save_lang_details', array(&$this, 'on_ajax_tp_save_lang_details'));
         add_action('wp_ajax_tp_add_lang', array(&$this, 'on_ajax_tp_add_lang'));
         add_action('wp_ajax_tp_reset_lang_override', array(&$this, 'on_ajax_tp_reset_lang_override'));
+        add_action('wp_ajax_tp_ollama_check', array(&$this, 'on_ajax_tp_ollama_check'));
 
         // allow language change for comments
         add_filter('comment_row_actions', array(&$this, 'comment_row_actions'), 999, 2);
@@ -183,6 +184,10 @@ class transposh_plugin_admin {
                 $this->transposh->options->yandex_key = TP_FROM_POST;
                 $this->transposh->options->baidu_key = TP_FROM_POST;
                 $this->transposh->options->libretranslate_server = TP_FROM_POST;
+                $this->transposh->options->ollama_endpoint = TP_FROM_POST;
+                $this->transposh->options->ollama_api_key = TP_FROM_POST;
+                $this->transposh->options->ollama_model = TP_FROM_POST;
+                $this->transposh->options->ollama_prompt = TP_FROM_POST;
                 tp_logger($_POST['engines']);
                 foreach ($_POST['engines'] as $engine) {
                     $sorted_engines[$engine] = $engine;
@@ -199,6 +204,7 @@ class transposh_plugin_admin {
                 $this->transposh->options->enable_url_translate = TP_FROM_POST;
                 $this->transposh->options->dont_add_rel_alternate = TP_FROM_POST;
                 $this->transposh->options->full_rel_alternate = TP_FROM_POST;
+                $this->transposh->options->protected_terms = TP_FROM_POST;
 
                 $this->transposh->options->jqueryui_override = TP_FROM_POST;
                 $this->transposh->options->parser_dont_break_puncts = TP_FROM_POST;
@@ -210,6 +216,9 @@ class transposh_plugin_admin {
                 $this->transposh->options->debug_logfile = str_ireplace("php", "npn", $this->transposh->options->debug_logfile); // FIX-CVE-2022-25812
                 $this->transposh->options->debug_remoteip = TP_FROM_POST;
 
+                break;
+            case "tp_protected_terms":
+                $this->transposh->options->protected_terms = TP_FROM_POST;
                 break;
         }
 
@@ -227,6 +236,7 @@ class transposh_plugin_admin {
             'tp_engines' => array(__('Translation Engines', TRANSPOSH_TEXT_DOMAIN), '', true),
             'tp_widget' => array(__('Widgets settings', TRANSPOSH_TEXT_DOMAIN), '', true),
             'tp_advanced' => array(__('Advanced', TRANSPOSH_TEXT_DOMAIN), '', true),
+            'tp_protected_terms' => array(__('Protected Terms', TRANSPOSH_TEXT_DOMAIN), '', true),
             'tp_editor' => array(__('Translation editor', TRANSPOSH_TEXT_DOMAIN)),
             'tp_utils' => array(__('Utilities', TRANSPOSH_TEXT_DOMAIN)),
             'tp_about' => array(__('About', TRANSPOSH_TEXT_DOMAIN)),
@@ -318,7 +328,7 @@ class transposh_plugin_admin {
                 wp_enqueue_script('transposh_backend', $this->transposh->transposh_plugin_url . '/' . TRANSPOSH_DIR_JS . '/admin/backendeditor.js', array('transposh'), TRANSPOSH_PLUGIN_VER, true);
         }
         wp_enqueue_script('transposh_context_help', $this->transposh->transposh_plugin_url . '/' . TRANSPOSH_DIR_JS . '/admin/contexthelp.js', array('jquery'), TRANSPOSH_PLUGIN_VER, true);
-        wp_enqueue_style('transposh_admin', $this->transposh->transposh_plugin_url . '/' . TRANSPOSH_DIR_CSS . '/admin.css'); ///, array('transposh'), TRANSPOSH_PLUGIN_VER, true)
+        wp_enqueue_style('transposh_admin', $this->transposh->transposh_plugin_url . '/' . TRANSPOSH_DIR_CSS . '/admin.css', array(), TRANSPOSH_PLUGIN_VER);
     }
 
     function load() {
@@ -720,6 +730,71 @@ Please note that while Transposh currently offers a hosted LibreTranslate servic
         $this->textinput($this->transposh->options->libretranslate_server_o
             , array('libretranslate', __('LibreTranslate Server', TRANSPOSH_TEXT_DOMAIN))
             , __('Server URL', TRANSPOSH_TEXT_DOMAIN), 100, 'libretranslate');
+        $this->textinput($this->transposh->options->ollama_endpoint_o
+            , array('ollama', __('Ollama Endpoint', TRANSPOSH_TEXT_DOMAIN))
+            , __('Endpoint URL', TRANSPOSH_TEXT_DOMAIN), 100, 'keys');
+        $this->textinput($this->transposh->options->ollama_api_key_o
+            , ''
+            , __('API Key', TRANSPOSH_TEXT_DOMAIN), 60, 'keys');
+        $this->textinput($this->transposh->options->ollama_model_o
+            , ''
+            , __('Model', TRANSPOSH_TEXT_DOMAIN), 60, 'keys');
+        $this->textareainput($this->transposh->options->ollama_prompt_o
+            , ''
+            , __('Prompt Template', TRANSPOSH_TEXT_DOMAIN), 6, 100, 'keys');
+        if ($this->transposh->options->ollama_endpoint) {
+            echo '<p><em>' . esc_html__('If the endpoint is a native Ollama server, the model must exist on that server. Example: ministral-3:8b', TRANSPOSH_TEXT_DOMAIN) . '</em></p>';
+            echo '<p>' . wp_kses_post($this->get_ollama_endpoint_status_message()) . '</p>';
+        }
+        echo '<p><button type="button" class="button" id="tp_ollama_check_button">' . esc_html__('Check Ollama', TRANSPOSH_TEXT_DOMAIN) . '</button></p>';
+        echo '<div id="tp_ollama_check_result" class="notice inline" style="display:none;margin:10px 0 0 0;padding:8px 12px;"></div>';
+        echo '<script type="text/javascript">
+document.addEventListener("DOMContentLoaded", function () {
+    var button = document.getElementById("tp_ollama_check_button");
+    var result = document.getElementById("tp_ollama_check_result");
+    if (!button || !result) return;
+    function setResult(type, html) {
+        result.className = "notice inline notice-" + type;
+        result.style.display = "block";
+        result.innerHTML = html;
+    }
+    button.addEventListener("click", function () {
+        var data = new URLSearchParams();
+        var endpoint = document.querySelector("[name=\'ollama_endpoint\']");
+        var apiKey = document.querySelector("[name=\'ollama_api_key\']");
+        var model = document.querySelector("[name=\'ollama_model\']");
+        var prompt = document.querySelector("[name=\'ollama_prompt\']");
+        data.append("action", "tp_ollama_check");
+        data.append("_ajax_nonce", "' . esc_js(wp_create_nonce('tp_ollama_check')) . '");
+        data.append("endpoint", endpoint ? endpoint.value : "");
+        data.append("api_key", apiKey ? apiKey.value : "");
+        data.append("model", model ? model.value : "");
+        data.append("prompt", prompt ? prompt.value : "");
+        button.disabled = true;
+        setResult("info", "' . esc_js(__('Checking Ollama configuration...', TRANSPOSH_TEXT_DOMAIN)) . '");
+        fetch(ajaxurl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+            body: data.toString()
+        })
+        .then(function (response) { return response.json(); })
+        .then(function (payload) {
+            if (!payload || !payload.success) {
+                var message = payload && payload.data && payload.data.message ? payload.data.message : "' . esc_js(__('Unknown Ollama check error.', TRANSPOSH_TEXT_DOMAIN)) . '";
+                setResult("error", message);
+                return;
+            }
+            setResult("success", payload.data.message);
+        })
+        .catch(function (error) {
+            setResult("error", "' . esc_js(__('Ollama check failed.', TRANSPOSH_TEXT_DOMAIN)) . '" + (error && error.message ? " " + error.message : ""));
+        })
+        .finally(function () {
+            button.disabled = false;
+        });
+    });
+});
+</script>';
 
         echo '<div style="overflow:auto; clear: both;">';
         $this->header(__('Select preferred auto translation engine', TRANSPOSH_TEXT_DOMAIN));
@@ -734,6 +809,203 @@ Please note that while Transposh currently offers a hosted LibreTranslate servic
         }
         echo "</ul></div>";
         $this->sectionstop();
+    }
+
+    private function get_ollama_endpoint_status_message() {
+        $endpoint = trim((string) $this->transposh->options->ollama_endpoint);
+        $api_key = trim((string) $this->transposh->options->ollama_api_key);
+
+        if (!$endpoint) {
+            return __('Ollama endpoint is not configured.', TRANSPOSH_TEXT_DOMAIN);
+        }
+
+        $headers = array();
+        if ($api_key !== '') {
+            $headers['Authorization'] = 'Bearer ' . $api_key;
+            $headers['X-API-Key'] = $api_key;
+        }
+
+        $base_endpoint = preg_replace('#/api/(generate|chat|tags)$#', '', rtrim($endpoint, '/'));
+        $requests = array(
+            $base_endpoint . '/api/tags',
+            $base_endpoint,
+        );
+
+        foreach ($requests as $request_url) {
+            $response = wp_remote_get($request_url, array(
+                'headers' => $headers,
+                'timeout' => 5,
+            ));
+
+            if (is_wp_error($response)) {
+                continue;
+            }
+
+            $code = wp_remote_retrieve_response_code($response);
+            $body = wp_remote_retrieve_body($response);
+            $json = json_decode($body, true);
+            if ($code >= 200 && $code < 300) {
+                if (is_array($json) && isset($json['models'])) {
+                    return sprintf(
+                        __('Ollama endpoint check: connected successfully. Native Ollama API detected at %s.', TRANSPOSH_TEXT_DOMAIN),
+                        esc_html($request_url)
+                    );
+                }
+
+                if (stripos($body, 'Ollama is running') !== false) {
+                    return sprintf(
+                        __('Ollama endpoint check: server responded successfully at %s.', TRANSPOSH_TEXT_DOMAIN),
+                        esc_html($request_url)
+                    );
+                }
+
+                return sprintf(
+                    __('Ollama endpoint check: server responded with HTTP %d at %s.', TRANSPOSH_TEXT_DOMAIN),
+                    $code,
+                    esc_html($request_url)
+                );
+            }
+        }
+
+        return __('Ollama endpoint check failed. Verify the URL, Cloudflare protection key, and server availability.', TRANSPOSH_TEXT_DOMAIN);
+    }
+
+    function on_ajax_tp_ollama_check() {
+        check_ajax_referer('tp_ollama_check');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('You are not allowed to perform this check.', TRANSPOSH_TEXT_DOMAIN)), 403);
+        }
+
+        $endpoint = isset($_POST['endpoint']) ? trim(wp_unslash($_POST['endpoint'])) : '';
+        $api_key = isset($_POST['api_key']) ? trim(wp_unslash($_POST['api_key'])) : '';
+        $model = isset($_POST['model']) ? trim(wp_unslash($_POST['model'])) : '';
+        $prompt = isset($_POST['prompt']) ? trim(wp_unslash($_POST['prompt'])) : '';
+
+        if (!$endpoint) {
+            wp_send_json_error(array('message' => __('Ollama endpoint is required.', TRANSPOSH_TEXT_DOMAIN)));
+        }
+        if (!$prompt) {
+            wp_send_json_error(array('message' => __('Ollama prompt is required.', TRANSPOSH_TEXT_DOMAIN)));
+        }
+
+        $headers = array('Content-Type' => 'application/json');
+        if ($api_key !== '') {
+            $headers['Authorization'] = 'Bearer ' . $api_key;
+            $headers['X-API-Key'] = $api_key;
+        }
+
+        $base_endpoint = preg_replace('#/api/(generate|chat|tags)$#', '', untrailingslashit($endpoint));
+        $native = false;
+
+        $tags_response = wp_remote_get($base_endpoint . '/api/tags', array(
+            'headers' => $headers,
+            'timeout' => 15,
+        ));
+        if (!is_wp_error($tags_response)) {
+            $tags_body = wp_remote_retrieve_body($tags_response);
+            $decoded = json_decode($tags_body, true);
+            if (is_array($decoded) && isset($decoded['models'])) {
+                $native = true;
+            }
+        }
+
+        if (!$native) {
+            $root_response = wp_remote_get($base_endpoint, array(
+                'headers' => $headers,
+                'timeout' => 15,
+            ));
+            if (!is_wp_error($root_response)) {
+                $root_body = wp_remote_retrieve_body($root_response);
+                if (stripos($root_body, 'Ollama is running') !== false) {
+                    $native = true;
+                }
+            }
+        }
+
+        if ($native && !$model) {
+            wp_send_json_error(array('message' => __('Native Ollama detected, but the model field is empty.', TRANSPOSH_TEXT_DOMAIN)));
+        }
+
+        $test_text = 'school is fun, but holidays are even better, especially with sun !';
+        $test_prompt = strtr($prompt, array(
+            'XXX' => $test_text,
+            '{{text}}' => $test_text,
+            '{{source_language}}' => 'English',
+            '{{source_language_code}}' => 'en',
+            '{{target_language}}' => 'French',
+            '{{target_language_code}}' => 'fr',
+        ));
+
+        if ($native) {
+            $check_url = preg_match('#/api/generate$#', $endpoint) ? $endpoint : $base_endpoint . '/api/generate';
+            $payload = array(
+                'model' => $model,
+                'prompt' => $test_prompt,
+                'stream' => false,
+                'options' => array('num_predict' => 120),
+            );
+        } else {
+            $check_url = $endpoint;
+            $payload = array(
+                'text' => $test_text,
+                'source_language' => 'en',
+                'target_language' => 'fr',
+                'model' => $model,
+                'prompt' => $test_prompt,
+                'stream' => false,
+                'messages' => array(
+                    array('role' => 'user', 'content' => $test_prompt),
+                ),
+            );
+        }
+
+        $response = wp_remote_post($check_url, array(
+            'headers' => $headers,
+            'timeout' => 45,
+            'body' => wp_json_encode($payload),
+        ));
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => sprintf(__('Ollama request failed: %s', TRANSPOSH_TEXT_DOMAIN), $response->get_error_message())));
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $json = json_decode($body, true);
+        $translation = '';
+        if (is_array($json)) {
+            if (!empty($json['translation']) && is_string($json['translation'])) {
+                $translation = $json['translation'];
+            } elseif (!empty($json['response']) && is_string($json['response'])) {
+                $translation = $json['response'];
+            } elseif (!empty($json['message']['content']) && is_string($json['message']['content'])) {
+                $translation = $json['message']['content'];
+            } elseif (!empty($json['choices'][0]['message']['content']) && is_string($json['choices'][0]['message']['content'])) {
+                $translation = $json['choices'][0]['message']['content'];
+            } elseif (!empty($json['choices'][0]['text']) && is_string($json['choices'][0]['text'])) {
+                $translation = $json['choices'][0]['text'];
+            }
+        }
+
+        if ($translation === '') {
+            wp_send_json_error(array(
+                'message' => sprintf(
+                    __('Ollama responded, but the translation could not be parsed. Response preview: %s', TRANSPOSH_TEXT_DOMAIN),
+                    '<code>' . esc_html(substr(trim($body), 0, 300)) . '</code>'
+                )
+            ));
+        }
+
+        $mode = $native ? __('Native API detected', TRANSPOSH_TEXT_DOMAIN) : __('Custom endpoint detected', TRANSPOSH_TEXT_DOMAIN);
+        wp_send_json_success(array(
+            'message' => sprintf(
+                '%s<br/><strong>%s</strong> <code>%s</code><br/><strong>%s</strong> <code>%s</code>',
+                esc_html__('Ollama configuration looks valid.', TRANSPOSH_TEXT_DOMAIN),
+                esc_html__('Mode:', TRANSPOSH_TEXT_DOMAIN),
+                esc_html($mode),
+                esc_html__('Test translation:', TRANSPOSH_TEXT_DOMAIN),
+                esc_html($translation)
+            )
+        ));
     }
 
     function tp_widget() {
@@ -776,6 +1048,14 @@ Please note that while Transposh currently offers a hosted LibreTranslate servic
             5 => __('Debug', TRANSPOSH_TEXT_DOMAIN),
         ));
         $this->textinput($this->transposh->options->debug_remoteip_o, '', sprintf(__('Remote debug IP (Your current IP is %s)', TRANSPOSH_TEXT_DOMAIN), transposh_utils::get_clean_server_var('REMOTE_ADDR')));
+        $this->sectionstop();
+    }
+
+    function tp_protected_terms() {
+        $this->section(__('Protected Terms', TRANSPOSH_TEXT_DOMAIN));
+        $this->normaltext(__('Use one term per line. Each listed term is protected before sending text to the translation engine and restored afterward.', TRANSPOSH_TEXT_DOMAIN));
+        $this->normaltext(__('This is intended for product names, brand names, edition names, and any wording that should stay unchanged in every language.', TRANSPOSH_TEXT_DOMAIN));
+        $this->textareainput($this->transposh->options->protected_terms_o, '', __('Terms to keep unchanged', TRANSPOSH_TEXT_DOMAIN), 14, 100, __('Example: Light Image Resizer, ObviousIdea, Light Image Editor', TRANSPOSH_TEXT_DOMAIN));
         $this->sectionstop();
     }
 
@@ -1080,6 +1360,15 @@ Please note that while Transposh currently offers a hosted LibreTranslate servic
             $this->header($head, $help);
         }
         echo $label . ': <input type="text" size="' . $length . '" class="regular-text" ' . $tpo->post_value_id_name() . '/>';
+    }
+
+    private function textareainput($tpo, $head, $label, $rows = 5, $cols = 80, $help = '') {
+        if ($head) {
+            $this->header($head, $help);
+        }
+        echo $label . ':<br/><textarea rows="' . intval($rows) . '" cols="' . intval($cols) . '" class="large-text code" ' . $tpo->post_value_id_name() . '>'
+            . esc_textarea($tpo->get_value())
+            . '</textarea>';
     }
 
     /** UTILITY FUNCTIONS  END * */

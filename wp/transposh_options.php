@@ -132,6 +132,14 @@ class transposh_option {
  * @property transposh_option $yandex_key_o
  * @property string           $libretranslate_server         Option to store the LibreTranslate server URL @since 1.0.9.7
  * @property transposh_option $libretranslate_server_o
+ * @property string           $ollama_endpoint               Option to store the Ollama endpoint URL
+ * @property transposh_option $ollama_endpoint_o
+ * @property string           $ollama_api_key                Option to store the Ollama API key
+ * @property transposh_option $ollama_api_key_o
+ * @property string           $ollama_model                  Option to store the Ollama model name
+ * @property transposh_option $ollama_model_o
+ * @property string           $ollama_prompt                 Option to store the Ollama translation prompt
+ * @property transposh_option $ollama_prompt_o
  * @property string           $preferred_translators         Option to store translator preference @since 0.4.2 (changed to string and plural @since 0.9.8)
  * @property transposh_option $preferred_translators_o
  *
@@ -156,6 +164,8 @@ class transposh_option {
  * @property transposh_option $dont_add_rel_alternate_o
  * @property boolean          $full_rel_alternate            Option to create fully qualified rel=alternate @since 1.0.1
  * @property transposh_option $full_rel_alternate_o
+ * @property string           $protected_terms               Option to store terms that should never be translated
+ * @property transposh_option $protected_terms_o
  * @property boolean          $parser_dont_break_puncts      Option to allow punctuations such as , . ( not to break @since 0.9.0
  * @property transposh_option $parser_dont_break_puncts_o
  * @property boolean          $parser_dont_break_numbers     Option to allow numbers not to break @since 0.9.0
@@ -268,7 +278,11 @@ class transposh_plugin_options {
         $this->register_option('yandex_key', TP_OPT_STRING);
         $this->register_option('baidu_key', TP_OPT_STRING);
         $this->register_option('libretranslate_server', TP_OPT_STRING);
-        $this->register_option('preferred_translators', TP_OPT_STRING, 'g,b,y,a,u');
+        $this->register_option('ollama_endpoint', TP_OPT_STRING);
+        $this->register_option('ollama_api_key', TP_OPT_STRING);
+        $this->register_option('ollama_model', TP_OPT_STRING, 'ministral-3:8b');
+        $this->register_option('ollama_prompt', TP_OPT_STRING, "traduit {{text}} de {{source_language}} vers {{target_language}}, tu es un moteur de traduction, ne reponds que la traduction sans aucun ajout ou commentaire, tu peux garder le markdown d'origine et l'appliquer a la nouvelle traduction");
+        $this->register_option('preferred_translators', TP_OPT_STRING, 'g,b,y,a,u,o');
 
         $this->register_option('widget_progressbar', TP_OPT_BOOLEAN, 0);
         $this->register_option('widget_allow_set_deflang', TP_OPT_BOOLEAN, 0);
@@ -278,6 +292,7 @@ class transposh_plugin_options {
         $this->register_option('jqueryui_override', TP_OPT_STRING);
         $this->register_option('dont_add_rel_alternate', TP_OPT_BOOLEAN, 0);
         $this->register_option('full_rel_alternate', TP_OPT_BOOLEAN, 0);
+        $this->register_option('protected_terms', TP_OPT_STRING, '');
         $this->register_option('parser_dont_break_puncts', TP_OPT_BOOLEAN, 0);
         $this->register_option('parser_dont_break_numbers', TP_OPT_BOOLEAN, 0);
         $this->register_option('parser_dont_break_entities', TP_OPT_BOOLEAN, 0);

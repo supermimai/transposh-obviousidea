@@ -59,6 +59,9 @@ class transposh_database {
     /** @var bool is redis working */
     private $redis_working = false;
 
+    private $dictionary_namespace;
+    private $dictionary_epoch;
+
     /**
      * PHP5+ only
      */
@@ -66,6 +69,9 @@ class transposh_database {
         $this->transposh = &$transposh;
         $this->translation_table = $GLOBALS['wpdb']->prefix . TRANSLATIONS_TABLE;
         $this->translation_log_table = $GLOBALS['wpdb']->prefix . TRANSLATIONS_LOG;
+        // A shared cache service must never share translations between sites.
+        $this->dictionary_namespace = substr(hash('sha256', home_url('/') . '|' . ABSPATH . '|' . $GLOBALS['wpdb']->prefix), 0, 24);
+        $this->dictionary_epoch = (string) get_option('transposh_dictionary_epoch', '1');
 
         if (class_exists('Memcache')) {
             tp_logger('Trying pecl-Memcache!', 3);
@@ -120,7 +126,7 @@ class transposh_database {
             return false;
         }
         $cached = false;
-        $key = $lang . '_' . str_replace(' ','_',$original); // memcached has issues with spaces in keys...
+        $key = $this->dictionary_key($original, $lang);
         if ($this->memcache_working) {
             if ($this->memcache) {
                 $cached = $this->memcache->get($key);
@@ -171,6 +177,35 @@ class transposh_database {
         return $cached;
     }
 
+    /** Fetch normalized dictionary keys in bounded batches where supported. */
+    function cache_fetch_many($originals, $lang) {
+        $found = array();
+        if (!TP_ENABLE_CACHE || !$originals) { return $found; }
+        if ($this->memcache_working && $this->memcached && method_exists($this->memcached, 'getMulti')) {
+            $lookup = array();
+            foreach ($originals as $original) {
+                $lookup[$this->dictionary_key($original, $lang)] = $original;
+            }
+            foreach (array_chunk(array_keys($lookup), 250) as $keys) {
+                $values = $this->memcached->getMulti($keys);
+                if (!is_array($values)) { continue; } // SQL batch is the fallback.
+                foreach ($values as $key => $value) {
+                    if (isset($lookup[$key]) && is_string($value)) {
+                        $decoded = explode('_', $value, 2);
+                        if (count($decoded) === 2) { $found[$lookup[$key]] = $decoded; }
+                    }
+                }
+            }
+            return $found;
+        }
+        // Keep the existing adapter behavior for Memcache, Redis, APCu, etc.
+        foreach ($originals as $original) {
+            $value = $this->cache_fetch($original, $lang);
+            if (is_array($value)) { $found[$original] = $value; }
+        }
+        return $found;
+    }
+
     /**
      * Function to store translation in memory cache
      * @param string $original
@@ -183,14 +218,15 @@ class transposh_database {
         if (!TP_ENABLE_CACHE) {
             return false;
         }
-        $key = $lang . '_' . str_replace(' ','_',$original); // memcached has issues with spaces in keys...
+        $key = $this->dictionary_key($original, $lang);
+        $ttl = $ttl > 0 ? min((int) $ttl, 86400) : 86400;
         if ($translated !== null) {
             $translated = implode('_', $translated);
         }
         $rc = false;
         if ($this->memcache_working) {
             if ($this->memcache) {
-                $rc = $this->memcache->set($key, $translated);
+                $rc = $this->memcache->set($key, $translated, 0, $ttl);
             } elseif ($this->memcached) {
                 $rc = $this->memcached->set($key, $translated, $ttl);
             }
@@ -220,10 +256,13 @@ class transposh_database {
      * @param string $lang
      */
     function cache_delete($original, $lang) {
+        if (isset($this->translations[$lang]) && array_key_exists($original, $this->translations[$lang])) {
+            unset($this->translations[$lang][$original]);
+        }
         if (!TP_ENABLE_CACHE) {
             return;
         }
-        $key = $lang . '_' . str_replace(' ','_',$original); // memcached has issues with spaces in keys...
+        $key = $this->dictionary_key($original, $lang);
         if ($this->memcache_working) {
             if ($this->memcache) {
                 $this->memcache->delete($key);
@@ -247,27 +286,16 @@ class transposh_database {
      * Clean the memory cache
      */
     function cache_clean() {
-        if (!TP_ENABLE_CACHE) {
-            return;
-        }
-        if ($this->memcache_working) {
-            if ($this->memcache) {
-                $this->memcache->flush();
-            } elseif ($this->memcached) {
-                $this->memcached->flush();
-            }
-        } elseif (function_exists('apc_clear_cache')) {
-            apc_clear_cache('user');
-        } elseif (function_exists('apc_clear_cache')) {
-            apc_clear_cache();
-        } elseif (function_exists('xcache_unset_by_prefix')) {
-            @xcache_unset_by_prefix();
-        } elseif (function_exists('eaccelerator_clean')) {
-            eaccelerator_clean();
-        } elseif ($this->redis_working) {
-            $this->redis->flushDB();
-        }
-        //TODO - clean on eaccelerator is not so clean...
+        // Logical invalidation, including APCu and Redis: never flush a shared
+        // backend. Old generations expire through their normal bounded TTL.
+        $this->dictionary_epoch = wp_generate_uuid4();
+        update_option('transposh_dictionary_epoch', $this->dictionary_epoch, false);
+        $this->translations = array();
+        do_action('transposh_translations_changed', array());
+    }
+
+    private function dictionary_key($original, $lang) {
+        return 'transposh:v2:' . $this->dictionary_namespace . ':' . $this->dictionary_epoch . ':' . hash('sha256', $lang . "\0" . $original);
     }
 
     /**
@@ -276,42 +304,48 @@ class transposh_database {
      * @param string $lang
      */
     function prefetch_translations($originals, $lang) {
-        if (!$originals) {
+        if (!$originals || !$this->transposh->options->is_active_language($lang)) {
             return;
         }
         tp_logger($originals, 4);
-        $where = '';
-        foreach ($originals as $original) {
-            $original = esc_sql(html_entity_decode($original, ENT_NOQUOTES, 'UTF-8'));
-            $cached = $this->cache_fetch($original, $lang);
-            // if $cached is not false, there is something in the cache, so no need to prefetch
-            if ($cached !== false) {
+        $pending = array();
+        foreach ($originals as $key => $value) {
+            // The parser supplies phrase => true, not a list of phrases.
+            // Accept lists too for existing callers of this public method.
+            $original = $value === true ? (string) $key : $value;
+            if (!is_string($original) && !is_numeric($original)) { continue; }
+            $original = esc_sql(htmlspecialchars(html_entity_decode((string)$original, ENT_NOQUOTES, 'UTF-8')));
+            if (isset($this->translations[$lang]) && array_key_exists($original, $this->translations[$lang])) {
                 continue;
             }
-            $where .= ( ($where) ? ' OR ' : '') . "original = '$original'";
+            $pending[$original] = true;
         }
-        // make sure $lang is reasonable, unless someone is messing with us, it will be ok
-        if (!($this->transposh->options->is_active_language($lang))) {
-            return;
+        foreach ($this->cache_fetch_many(array_keys($pending), $lang) as $original => $cached) {
+            $this->translations[$lang][$original] = $cached;
+            unset($pending[$original]);
         }
-
-        // If we have nothing, we will do nothing
-        if (!$where) {
-            return;
+        if (!$pending) { return; }
+        $conditions = array();
+        foreach (array_keys($pending) as $original) {
+            $conditions[] = "original = '$original'";
         }
+        $where = implode(' OR ', $conditions);
         $query = "SELECT original, translated, source FROM {$this->translation_table} WHERE ($where) and lang = '$lang' ";
         $rows = $GLOBALS['wpdb']->get_results($query, ARRAY_A);
-        if (empty($rows)) {
-            return;
+        if (!is_array($rows) || $GLOBALS['wpdb']->last_error) { return; } // Do not memoize a failed SQL query.
+        foreach (array_keys($pending) as $original) {
+            // Actual batch misses are valid only for this request. A subsequent
+            // translation write clears them through cache_delete().
+            $this->translations[$lang][$original] = null;
         }
-        // we are saving in the array and not directly to cache, because cache might not exist...
         foreach ($rows as $row) {
-            // we are making sure to use the escaped version, because that is what we'll ask about
-            $ro = esc_sql(html_entity_decode($row['original'], ENT_NOQUOTES, 'UTF-8'));
-            //$this->translations[$ro] = array($row['source'], stripslashes($row['translated']));
-            $this->translations[$ro] = array($row['source'], str_replace('&amp;nbsp;', '&nbsp;', stripslashes($row['translated'])));
+            // Rows already use the stored HTML-encoded form. Decoding it here
+            // would break ampersands and quotes in request-local dictionary keys.
+            $ro = esc_sql($row['original']);
+            $this->translations[$lang][$ro] = array($row['source'], str_replace('&amp;nbsp;', '&nbsp;', stripslashes($row['translated'])));
+            $this->cache_store($ro, $lang, $this->translations[$lang][$ro], TP_CACHE_TTL);
         }
-        tp_logger('prefetched: ' . count($this->translations), 5);
+        tp_logger('prefetched: ' . count($this->translations[$lang]), 5);
     }
 
     /**
@@ -329,31 +363,34 @@ class transposh_database {
         // This should fix a long standing bug with html entities
         //$original = esc_sql(html_entity_decode($orig, ENT_NOQUOTES, 'UTF-8'));
         $original = esc_sql(htmlspecialchars(html_entity_decode($orig, ENT_NOQUOTES, 'UTF-8')));
+        // Rendering can ask for the same phrase many times. Keep both positive
+        // lookups and actual SQL misses in this request's language-specific map.
+        if (isset($this->translations[$lang]) && array_key_exists($original, $this->translations[$lang])) {
+            return $this->translations[$lang][$original];
+        }
         // first we look in the cache
         $cached = $this->cache_fetch($original, $lang);
         if ($cached !== false && is_array($cached)) {
+            $this->translations[$lang][$original] = $cached;
             tp_logger("Exit from cache: {$cached[0]} {$cached[1]}", 4);
             return $cached;
         }
-        // then we look for a prefetch
-        if (isset($this->translations[$original])) {
-            $translated = $this->translations[$original];
-            tp_logger("prefetch result for $original >>> {$this->translations[$original][0]} ({$this->translations[$original][1]})", 4);
-        } else {
-            // make sure $lang is reasonable, unless someone is messing with us, it will be ok
-            if (!($this->transposh->options->is_active_language($lang))) {
-                return false;
-            }
-            $query = "SELECT translated, source FROM {$this->translation_table} WHERE original = '$original' and lang = '$lang' ";
-            $row = $GLOBALS['wpdb']->get_row($query);
-
-            if ($row !== null) {
-                $translated_text = stripslashes($row->translated);
-                $translated = array($row->source, $translated_text);
-                tp_logger("db result for $original >>> $translated_text ($lang) ({$row->source})", 4);
-            }
+        if (!($this->transposh->options->is_active_language($lang))) {
+            return false;
+        }
+        $query = "SELECT translated, source FROM {$this->translation_table} WHERE original = '$original' and lang = '$lang' ";
+        $row = $GLOBALS['wpdb']->get_row($query);
+        if ($GLOBALS['wpdb']->last_error) {
+            // A failed lookup is not a missing translation. Let a later call retry.
+            return false;
+        }
+        if ($row !== null) {
+            $translated_text = stripslashes($row->translated);
+            $translated = array($row->source, $translated_text);
+            tp_logger("db result for $original >>> $translated_text ($lang) ({$row->source})", 4);
         }
         // we can store the result in the cache (or the fact we don't have one)
+        $this->translations[$lang][$original] = $translated;
         $this->cache_store($original, $lang, $translated, TP_CACHE_TTL);
 
         return $translated;
@@ -379,19 +416,14 @@ class transposh_database {
             tp_logger("Exit from cache: $translation $cached", 4);
             return $cached;
         }
-        // lang
-        // FIXME - no prefetching for originals yet...
-        if (isset($this->translations) && $this->translations[$translation]) {
-            $original = $this->translations[$translation];
-            tp_logger("prefetch result for $translation >>> {$this->translations[$translation][0]} ({$this->translations[$translation][1]})", 3);
-        } else {
-            $query = "SELECT original FROM {$this->translation_table} WHERE translated = '$translation' and lang = '$lang' ";
-            $row = $GLOBALS['wpdb']->get_row($query);
+        // Forward prefetch entries contain source => translation, not reverse
+        // mappings. Reusing that array here can return an array as an original.
+        $query = "SELECT original FROM {$this->translation_table} WHERE translated = '$translation' and lang = '$lang' ";
+        $row = $GLOBALS['wpdb']->get_row($query);
 
-            if ($row !== null) {
-                $original = stripslashes($row->original);
-                tp_logger("db result for $translation >>> $original ($lang)", 4);
-            }
+        if ($row !== null) {
+            $original = stripslashes($row->original);
+            tp_logger("db result for $translation >>> $original ($lang)", 4);
         }
 
         // we can store the result in the cache (or the fact we don't have one)
@@ -458,6 +490,7 @@ class transposh_database {
         $backup_immidiate_possible = false;
         $firstitem = true;
         $alreadybatched = [];
+        $changed_languages = array();
         // We are now processing all posted items
         for ($i = 0; $i < $items; $i++) {
             if (isset($_POST["tk$i"])) {
@@ -505,7 +538,10 @@ class transposh_database {
                     continue;
                     //return; // too harsh, we just need to get to the next in for
                 }
-                if ($translation == esc_sql(htmlspecialchars(stripslashes(rawurldecode($translated_text)))) && $old_source == $source) {
+                // fetch_translation() already returns the stored HTML-encoded
+                // value, with SQL slashes removed. Do not HTML/URL-decode or
+                // encode it again: entities and literal %XX are content here.
+                if ($translation === esc_sql($translated_text) && $old_source == $source) {
                     tp_logger("Warning attempt to retranslate with same text: $original, $translation", 1);
                     continue;
                     //return; // too harsh, we just need to get to the next in for
@@ -517,6 +553,7 @@ class transposh_database {
                 continue;
             }
             $delvalues .= ( $firstitem ? '' : ' OR ') . "(original ='$original' AND lang='$lang')";
+            $changed_languages[$lang] = true;
             // Setting the transaction log records
             $values .= ( $firstitem ? '' : ', ') . "('" . $original . "','" . $translation . "','" . $lang . "','" . $loguser . "','" . $source . "')";
 
@@ -565,6 +602,12 @@ class transposh_database {
             tp_logger($GLOBALS['wpdb']->last_error, 1);
             tp_logger("Error !!! failed to insert to db $original , $translation, $lang,", 1);
             header("HTTP/1.0 404 Failed to update language database " . $GLOBALS['wpdb']->last_error);
+        }
+
+        // Notify only after the dictionary has changed, for human and automatic
+        // batches alike. A failed insertion can still follow a successful delete.
+        if ($delresult > 0 || $addresult > 0) {
+            do_action('transposh_translations_changed', array_keys($changed_languages));
         }
 
         // if its a human translation we will call the action, this takes the assumption of a single human translation in
@@ -693,7 +736,7 @@ class transposh_database {
                 $query = "DELETE " .
                         "FROM {$this->translation_table} " .
                         "WHERE original='$original' AND lang='$lang'"; // AND timestamp='$timestamp'";
-                $GLOBALS['wpdb']->query($query);
+                $deleted = $GLOBALS['wpdb']->query($query);
                 tp_logger($query, 3);
 
                 // clear cache!
@@ -704,7 +747,10 @@ class transposh_database {
                         "FROM {$this->translation_log_table} " .
                         "WHERE original='$original' AND lang='$lang' " .
                         "ORDER BY timestamp DESC LIMIT 1";
-                $GLOBALS['wpdb']->query($query);
+                $restored = $GLOBALS['wpdb']->query($query);
+                if ($deleted > 0 || $restored > 0) {
+                    do_action('transposh_translations_changed', array($langp));
+                }
                 tp_logger($query, 3);
 
                 //need to remove last from log now...
@@ -1074,8 +1120,11 @@ class transposh_database {
                 $delvalues = "($target ='{$row->$target}' AND lang='{$row->lang}' AND source > 0)";
                 $update = "DELETE FROM " . $this->translation_table . " WHERE $delvalues";
                 tp_logger($update, 3);
-                $GLOBALS['wpdb']->query($update);
+                $changed = $GLOBALS['wpdb']->query($update);
                 $this->cache_delete($row->original, $row->lang);
+                if ($changed > 0) {
+                    do_action('transposh_translations_changed', array($row->lang));
+                }
             }
         }
     }
@@ -1212,9 +1261,14 @@ class transposh_database {
         $update = "DELETE FROM " . $this->translation_table . " WHERE $delvalues";
         tp_logger($update, 3);
         $result = $GLOBALS['wpdb']->query($update);
+        $deleted = $result;
         $update = "INSERT INTO " . $this->translation_table . " (original, translated, lang, source) VALUES $values";
         tp_logger($update, 3);
         $result = $GLOBALS['wpdb']->query($update);
+        if ($deleted > 0 || $result > 0) {
+            $this->cache_delete($original, $lang);
+            do_action('transposh_translations_changed', array($lang));
+        }
 
         if ($result !== FALSE) {
             // update the transaction log too

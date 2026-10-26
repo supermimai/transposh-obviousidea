@@ -62,6 +62,63 @@ class transposh_translate
         return $response;
     }
 
+    private static function getProtectedTerms(): array {
+        global $my_transposh_plugin;
+
+        $raw_terms = preg_split('/\R+/', (string) $my_transposh_plugin->options->protected_terms);
+        $terms = array();
+        foreach ($raw_terms as $term) {
+            $term = trim((string) $term);
+            if ($term !== '') {
+                $terms[$term] = $term;
+            }
+        }
+
+        uasort($terms, function ($left, $right) {
+            return strlen($right) <=> strlen($left);
+        });
+
+        return array_values($terms);
+    }
+
+    private static function protectTermsInText(string $text, array $terms): array {
+        if (!$terms || $text === '') {
+            return array($text, array());
+        }
+
+        $placeholder_index = 0;
+        $restore_map = array();
+        foreach ($terms as $term) {
+            $pattern = '~' . preg_quote($term, '~') . '~u';
+            $text = preg_replace_callback($pattern, function ($matches) use (&$placeholder_index, &$restore_map) {
+                $placeholder = '__TP_PROTECTED_TERM_' . $placeholder_index . '__';
+                $restore_map[$placeholder] = $matches[0];
+                $placeholder_index++;
+                return $placeholder;
+            }, $text);
+        }
+
+        return array($text, $restore_map);
+    }
+
+    private static function restoreProtectedTerms($translated, array $restore_map) {
+        if (!$restore_map || $translated === false || $translated === null) {
+            return $translated;
+        }
+
+        if (is_array($translated)) {
+            return array_map(function ($item) use ($restore_map) {
+                return is_string($item) ? strtr($item, $restore_map) : $item;
+            }, $translated);
+        }
+
+        if (is_string($translated)) {
+            return strtr($translated, $restore_map);
+        }
+
+        return $translated;
+    }
+
     /******************************************
      * Proxied Yandex translate suggestions
      *****************************************/
@@ -457,6 +514,7 @@ class transposh_translate
     {
         $q_was_array = is_array($q);
         $config = self::getMicrosoftTranslatorConfig();
+        $protected_terms = self::getProtectedTerms();
         if ($config['key'] === '') {
             tp_logger("Error: Microsoft Translator API key is missing.", 1);
             return false;
@@ -479,12 +537,18 @@ class transposh_translate
         }
         $url = $config['endpoint'] . '/translate?' . implode('&', $query_args);
 
+        $restore_maps = array();
         if ($q_was_array) {
-            $request_body = array_map(function ($item) {
-                return array('Text' => urldecode($item));
-            }, $q);
+            $request_body = array();
+            foreach ($q as $index => $item) {
+                list($protected_text, $restore_map) = self::protectTermsInText(urldecode($item), $protected_terms);
+                $restore_maps[$index] = $restore_map;
+                $request_body[] = array('Text' => $protected_text);
+            }
         } else {
-            $request_body = array(array('Text' => $q));
+            list($protected_text, $restore_map) = self::protectTermsInText(urldecode($q), $protected_terms);
+            $restore_maps[0] = $restore_map;
+            $request_body = array(array('Text' => $protected_text));
         }
 
         $headers = array(
@@ -522,17 +586,259 @@ class transposh_translate
                     tp_logger("Error: Missing translated item in Microsoft Translator batch response.", 1);
                     return false;
                 }
-                $result[] = $item['translations'][0]['text'];
+                $result[] = self::restoreProtectedTerms($item['translations'][0]['text'], $restore_maps[count($result)] ?? array());
             }
             return $result;
         }
 
         if (isset($data[0]['translations'][0]['text'])) {
-            return $data[0]['translations'][0]['text'];
+            return self::restoreProtectedTerms($data[0]['translations'][0]['text'], $restore_maps[0] ?? array());
         }
 
         tp_logger("Error: Unable to parse Microsoft Translator response.", 1);
         return false;
+    }
+
+    private static function getOllamaConfig(): array {
+        global $my_transposh_plugin;
+
+        return array(
+            'endpoint' => rtrim(trim((string)$my_transposh_plugin->options->ollama_endpoint), '/'),
+            'api_key' => trim((string)$my_transposh_plugin->options->ollama_api_key),
+            'model' => trim((string)$my_transposh_plugin->options->ollama_model),
+            'prompt' => trim((string)$my_transposh_plugin->options->ollama_prompt),
+        );
+    }
+
+    private static function getOllamaHeaders(string $api_key): array {
+        $headers = array('Content-Type: application/json');
+        if ($api_key !== '') {
+            $headers[] = 'Authorization: Bearer ' . $api_key;
+            $headers[] = 'X-API-Key: ' . $api_key;
+        }
+        return $headers;
+    }
+
+    private static function isNativeOllamaEndpoint(string $endpoint, string $api_key): bool {
+        static $cache = array();
+
+        $cache_key = md5($endpoint . '|' . $api_key);
+        if (isset($cache[$cache_key])) {
+            return $cache[$cache_key];
+        }
+
+        $headers = self::getOllamaHeaders($api_key);
+        $base_endpoint = preg_replace('#/api/(generate|chat|tags)$#', '', $endpoint);
+        $base_endpoint = rtrim($base_endpoint, '/');
+
+        $candidates = array(
+            $base_endpoint . '/api/tags',
+            $base_endpoint,
+        );
+
+        foreach ($candidates as $candidate) {
+            $response = self::executeCurlRequest($candidate, array(), $headers);
+            if ($response === false) {
+                continue;
+            }
+
+            $decoded = json_decode($response, true);
+            if (is_array($decoded) && isset($decoded['models'])) {
+                $cache[$cache_key] = true;
+                return true;
+            }
+
+            if (stripos($response, 'Ollama is running') !== false) {
+                $cache[$cache_key] = true;
+                return true;
+            }
+        }
+
+        $cache[$cache_key] = false;
+        return false;
+    }
+
+    private static function getNativeOllamaGenerateEndpoint(string $endpoint): string {
+        if (preg_match('#/api/generate$#', $endpoint)) {
+            return $endpoint;
+        }
+        if (preg_match('#/api/chat$#', $endpoint)) {
+            return preg_replace('#/api/chat$#', '/api/generate', $endpoint);
+        }
+        if (preg_match('#/api/tags$#', $endpoint)) {
+            return preg_replace('#/api/tags$#', '/api/generate', $endpoint);
+        }
+        return rtrim($endpoint, '/') . '/api/generate';
+    }
+
+    private static function formatOllamaPrompt(string $template, string $text, string $source_lang, string $target_lang): string {
+        $source_name = transposh_consts::get_language_name($source_lang);
+        $target_name = transposh_consts::get_language_name($target_lang);
+
+        return strtr($template, array(
+            'XXX' => $text,
+            '{{text}}' => $text,
+            '{{source_language}}' => $source_name ?: $source_lang,
+            '{{source_language_code}}' => $source_lang,
+            '{{target_language}}' => $target_name ?: $target_lang,
+            '{{target_language_code}}' => $target_lang,
+        ));
+    }
+
+    private static function parseOllamaResponse(string $response) {
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            return false;
+        }
+
+        if (isset($data['translation']) && is_string($data['translation'])) {
+            return $data['translation'];
+        }
+        if (isset($data['response']) && is_string($data['response'])) {
+            return $data['response'];
+        }
+        if (isset($data['message']['content']) && is_string($data['message']['content'])) {
+            return $data['message']['content'];
+        }
+        if (isset($data['choices'][0]['message']['content']) && is_string($data['choices'][0]['message']['content'])) {
+            return $data['choices'][0]['message']['content'];
+        }
+        if (isset($data['choices'][0]['text']) && is_string($data['choices'][0]['text'])) {
+            return $data['choices'][0]['text'];
+        }
+
+        return false;
+    }
+
+    private static function requestOllamaTranslation(string $endpoint, string $api_key, string $model, string $prompt, string $source_lang, string $target_lang, string $text) {
+        list($protected_text, $restore_map) = self::protectTermsInText($text, self::getProtectedTerms());
+        $final_prompt = self::formatOllamaPrompt($prompt, $protected_text, $source_lang, $target_lang);
+        $headers = self::getOllamaHeaders($api_key);
+
+        if (self::isNativeOllamaEndpoint($endpoint, $api_key)) {
+            if ($model === '') {
+                tp_logger("Error: Ollama model is missing for native Ollama endpoint.", 1);
+                return false;
+            }
+
+            $payload = array(
+                'model' => $model,
+                'prompt' => $final_prompt,
+                'stream' => false,
+                'options' => array(
+                    'num_predict' => 120
+                )
+            );
+
+            $response = self::executeCurlRequest(
+                self::getNativeOllamaGenerateEndpoint($endpoint),
+                array(
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => wp_json_encode($payload)
+                ),
+                $headers
+            );
+
+            if ($response === false) {
+                tp_logger("Error: Ollama native request failed.", 1);
+                return false;
+            }
+
+            $parsed = self::parseOllamaResponse($response);
+            if ($parsed === false) {
+                tp_logger("Error: Unable to parse native Ollama response.", 1);
+                tp_logger($response, 3);
+            }
+
+            return self::restoreProtectedTerms($parsed, $restore_map);
+        }
+
+        $payload = array(
+            'text' => $text,
+            'source_language' => $source_lang,
+            'target_language' => $target_lang,
+            'model' => $model,
+            'prompt' => $final_prompt,
+            'stream' => false,
+            'messages' => array(
+                array('role' => 'user', 'content' => $final_prompt)
+            )
+        );
+
+        $response = self::executeCurlRequest(
+            $endpoint,
+            array(
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => wp_json_encode($payload)
+            ),
+            $headers
+        );
+
+        if ($response === false) {
+            tp_logger("Error: Ollama cURL or HTTP error.", 1);
+            return false;
+        }
+
+        $parsed = self::parseOllamaResponse($response);
+        if ($parsed === false) {
+            tp_logger("Error: Unable to parse Ollama response.", 1);
+            tp_logger($response, 3);
+        }
+
+        return self::restoreProtectedTerms($parsed, $restore_map);
+    }
+
+    public static function get_ollama_translation($tl, $sl, $q)
+    {
+        $config = self::getOllamaConfig();
+        if ($config['endpoint'] === '') {
+            tp_logger("Error: Ollama endpoint is missing.", 1);
+            return false;
+        }
+        if (!self::isNativeOllamaEndpoint($config['endpoint'], $config['api_key']) && $config['model'] === '') {
+            tp_logger("Warning: Ollama model is empty, relying on custom endpoint defaults.", 2);
+        }
+        if ($config['prompt'] === '') {
+            tp_logger("Error: Ollama prompt is missing.", 1);
+            return false;
+        }
+
+        $target_lang = transposh_consts::get_engine_lang_code($tl, 'o');
+        $source_lang = $sl ? transposh_consts::get_engine_lang_code($sl, 'o') : '';
+        if (!$target_lang) {
+            tp_logger("Error: Unsupported Ollama target language.", 1);
+            return false;
+        }
+
+        if (is_array($q)) {
+            $result = array();
+            foreach ($q as $item) {
+                $translated = self::requestOllamaTranslation(
+                    $config['endpoint'],
+                    $config['api_key'],
+                    $config['model'],
+                    $config['prompt'],
+                    $source_lang,
+                    $target_lang,
+                    urldecode($item)
+                );
+                if ($translated === false) {
+                    return false;
+                }
+                $result[] = $translated;
+            }
+            return $result;
+        }
+
+        return self::requestOllamaTranslation(
+            $config['endpoint'],
+            $config['api_key'],
+            $config['model'],
+            $config['prompt'],
+            $source_lang,
+            $target_lang,
+            urldecode($q)
+        );
     }
 
     /******************************************

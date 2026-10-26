@@ -55,6 +55,29 @@ This fork is used and tested on real websites, including production-oriented val
 
 ## Installation
 
+### ObviousIdea 1.0.15: WP Rocket and dictionary caching
+
+This release includes native WP Rocket language-page caching and
+translation-driven invalidation, plus isolated dictionary keys and batched
+Memcached prefetch. See [the mirror validation report](docs/cache-validation-2026-10-15.md)
+for source reconciliation, tests, local packaging instructions and limits.
+Download the installable WordPress ZIP and checksums from the
+[1.0.15 release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15).
+See the [release verification and limits](docs/release-1.0.15-validation.md),
+including installation of the downloaded ZIP, rollback and stored-translation tests.
+The earlier [1.0.15-rc1 pre-release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15-rc1)
+remains available for historical comparison. No production deployment is included.
+The earlier [1.0.14 development snapshot and checksums](packages/README.md)
+remain available for reproducing the original validation.
+
+For country-personalized purchase pages, see the
+[cacheable shop shell and private-fragment experiment](docs/shop-fragments-2026-10-26.md).
+It separates site-specific commerce work from the generic empty-container
+parser correction and documents the measurements and remaining release checks.
+The [plugin-only follow-up](docs/performance-followup-2026-10-26.md) covers
+conditional URL prefetch, identical-save handling and additional parser guards,
+validated by isolated regressions and public mirror requests.
+
 1. Upload the plugin to the /wp-content/plugins/ directory.
 2. Activate the plugin from the **'Plugins'** menu in your WordPress dashboard.
 3. Go to the **'Widgets'** section and add the Transposh widget to your sidebar. Choose your preferred display interface.
