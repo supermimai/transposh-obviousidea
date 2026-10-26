@@ -30,6 +30,8 @@ These results do not establish a site-wide visitor improvement.
 - Every final HTTP response was 200, noindex, and in the expected language,
   without a redirect or PHP session cookie. Consent variants also retained fast
   warm responses: approximately 155–161 ms in the optimized copy.
+  Cache reuse was assessed from repeated public responses and stable
+  Last-Modified headers, without directly opening server cache files.
 - The optimized first responses without consent were 1,302 / 803 / 777 ms for
   EN / FR / DE. This still requires cold page generation. A warm-cache result
   must not be presented as the cost of every request after a purge.
