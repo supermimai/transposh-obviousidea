@@ -55,15 +55,16 @@ This fork is used and tested on real websites, including production-oriented val
 
 ## Installation
 
-### Development candidate: WP Rocket and dictionary caching
+### ObviousIdea 1.0.15: WP Rocket and dictionary caching
 
-The development branch includes native WP Rocket language-page caching and
+This release includes native WP Rocket language-page caching and
 translation-driven invalidation, plus isolated dictionary keys and batched
 Memcached prefetch. See [the mirror validation report](docs/cache-validation-2026-10-15.md)
 for source reconciliation, tests, local packaging instructions and limits.
-The [1.0.15-rc1 pre-release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15-rc1)
-provides an installable WordPress ZIP for testing. No production deployment is
-included. The stable tag in readme.txt remains 1.0.14.
+Download the installable WordPress ZIP and checksums from the
+[1.0.15 release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15).
+The earlier [1.0.15-rc1 pre-release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15-rc1)
+remains available for historical comparison. No production deployment is included.
 The earlier [1.0.14 development snapshot and checksums](packages/README.md)
 remain available for reproducing the original validation.
 
