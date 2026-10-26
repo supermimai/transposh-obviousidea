@@ -63,6 +63,8 @@ Memcached prefetch. See [the mirror validation report](docs/cache-validation-202
 for source reconciliation, tests, local packaging instructions and limits.
 Download the installable WordPress ZIP and checksums from the
 [1.0.15 release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15).
+See the [release verification and limits](docs/release-1.0.15-validation.md),
+including installation of the downloaded ZIP, rollback and stored-translation tests.
 The earlier [1.0.15-rc1 pre-release](https://github.com/supermimai/transposh-obviousidea/releases/tag/v1.0.15-rc1)
 remains available for historical comparison. No production deployment is included.
 The earlier [1.0.14 development snapshot and checksums](packages/README.md)
