@@ -538,7 +538,10 @@ class transposh_database {
                     continue;
                     //return; // too harsh, we just need to get to the next in for
                 }
-                if ($translation == esc_sql(htmlspecialchars(stripslashes(rawurldecode($translated_text)))) && $old_source == $source) {
+                // fetch_translation() already returns the stored HTML-encoded
+                // value, with SQL slashes removed. Do not HTML/URL-decode or
+                // encode it again: entities and literal %XX are content here.
+                if ($translation === esc_sql($translated_text) && $old_source == $source) {
                     tp_logger("Warning attempt to retranslate with same text: $original, $translation", 1);
                     continue;
                     //return; // too harsh, we just need to get to the next in for

@@ -71,6 +71,9 @@ For country-personalized purchase pages, see the
 [cacheable shop shell and private-fragment experiment](docs/shop-fragments-2026-10-26.md).
 It separates site-specific commerce work from the generic empty-container
 parser correction and documents the measurements and remaining release checks.
+The [plugin-only follow-up](docs/performance-followup-2026-10-26.md) covers
+conditional URL prefetch, identical-save handling and additional parser guards,
+validated by isolated regressions and public mirror requests.
 
 1. Upload the plugin to the /wp-content/plugins/ directory.
 2. Activate the plugin from the **'Plugins'** menu in your WordPress dashboard.

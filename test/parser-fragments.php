@@ -4,7 +4,7 @@ if (!class_exists('tp_parser')) {
     throw new RuntimeException('Load Transposh first.');
 }
 function transposh_test_parser_fragments($parser_class = 'tp_parser') {
-    $render = static function($html, $language = 'fr', $edit = false, $class = null) use ($parser_class) {
+    $render = static function($html, $language = 'fr', $edit = false, $class = null, $header = '') use ($parser_class) {
         $target_class = $class ?: $parser_class;
         $parser = new $target_class();
         $parser->lang = $language;
@@ -12,6 +12,7 @@ function transposh_test_parser_fragments($parser_class = 'tp_parser') {
         $parser->is_edit_mode = $edit;
         $parser->is_auto_translate = false;
         $parser->allow_ad = false;
+        $parser->added_header = $header;
         $parser->fetch_translate_func = static function($phrase, $lang) {
             $dictionary = array('fr'=>array('Hello'=>'Bonjour','Example'=>'Exemple'), 'de'=>array('Hello'=>'Hallo'), 'ar'=>array('Hello'=>'مرحبا'));
             return isset($dictionary[$lang][$phrase]) ? array(0, $dictionary[$lang][$phrase]) : null;
@@ -38,6 +39,14 @@ function transposh_test_parser_fragments($parser_class = 'tp_parser') {
     $html = $render('<html><body><p>Hello</p></body></html>');
     $checks['document_without_head'] = strpos($html, 'Bonjour') !== false;
     $checks['empty_string'] = $render('') === '';
+    foreach (array(' ', '<!-- comment -->') as $index=>$inside) {
+        $html = $render('<html><head>'.$inside.'</head><body>Hello</body></html>');
+        $checks['head_without_element_children_'.$index] = strpos($html,'Bonjour') !== false && substr_count($html,'name="translation-stats"') === 1;
+    }
+    $html = $render('<html><head></head><body>Hello</body></html>', 'fr', true, null, '<meta name="unit-header" content="retained">');
+    $checks['empty_head_preserves_added_header'] = strpos($html, 'name="unit-header"') !== false && strpos($html, 'name="translation-stats"') !== false;
+    $parser = new $parser_class(); $parser->might_json = true;
+    $checks['empty_json_buffer'] = (string)$parser->fix_html('') === '';
     $normal = '<html><head><meta charset="utf-8"><title>Example</title></head><body><p>Hello</p><script>const value="Hello";</script><style>.x{content:"Hello"}</style></body></html>';
     $html = $render($normal);
     $checks['normal_document_translation'] = strpos($html, 'Bonjour') !== false && strpos($html, 'Exemple') !== false;

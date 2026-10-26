@@ -694,7 +694,7 @@ class tp_parser {
         $this->stats = new tp_parserstats();
         // handler for possible json (buddypress)
         if ($this->might_json) {
-            if ($string[0] == '{') {
+            if ($string !== '' && $string[0] == '{') {
                 $jsoner = json_decode($string);
                 if ($jsoner != null) {
                     tp_logger("json detected (buddypress?)", 4);
@@ -1047,7 +1047,7 @@ class tp_parser {
                 if ($last !== null) {
                     $last->outertext .= $this->added_header;
                 } else {
-                    $head->innertext = $this->added_header;
+                    $head->innertext .= $this->added_header;
                 }
             }
         }
@@ -1058,7 +1058,7 @@ class tp_parser {
             if ($last !== null) {
                 $last->outertext .= $stats_meta;
             } else {
-                $head->innertext = $stats_meta;
+                $head->innertext .= $stats_meta;
             }
         }
         // we make sure that the result is clear from our shananigans

@@ -406,7 +406,11 @@ class transposh_plugin {
             $parse->fetch_translate_func = array(&$this->database, 'fetch_translation');
             $parse->prefetch_translate_func = array(&$this->database, 'prefetch_translations');
             $parse->url_rewrite_func = array(&$this, 'rewrite_url');
-            $parse->split_url_func = array(&$this, 'split_url');
+            // URL segments only need dictionary prefetch when translated slugs
+            // will actually consume them. Visible phrases are still prefetched.
+            if ($this->options->enable_url_translate) {
+                $parse->split_url_func = array(&$this, 'split_url');
+            }
             $parse->dir_rtl = transposh_consts::is_language_rtl($this->target_language);
             $parse->lang = $this->target_language;
             $parse->default_lang = $this->options->is_default_language($this->target_language);
