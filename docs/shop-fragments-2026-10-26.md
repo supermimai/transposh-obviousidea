@@ -53,6 +53,15 @@ not proof of paint of every control, completed checkout, or payment readiness.
 The private request itself took approximately 482–484 ms in these browser
 samples. It still uses WordPress and is not free server work.
 
+A final exploratory LCP check used one new desktop navigation per condition,
+retaining observations for two seconds after commercial content was ready.
+Observed LCP was EN 1,396 → 436 ms, FR 1,288 → 428 ms, DE 1,292 → 444 ms.
+The prototype introduced small layout shifts, with sums of approximately
+0.021 / 0.024 / 0.022 during those short windows, versus zero in the reference.
+These are single local observations, not full-session CLS, repeated LCP medians
+or Cloudflare percentiles. Reserving the status/control space remains a useful
+layout refinement before rollout.
+
 ## Why separating the shell matters
 
 The site's existing price shortcode consults GeoIP for currency and VAT. Its
