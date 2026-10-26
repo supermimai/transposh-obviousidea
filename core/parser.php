@@ -1021,7 +1021,12 @@ class tp_parser {
         if ($hiddenspans) {
             $body = $this->html->find('body', 0);
             if ($body != null) {
-                $body->lastChild()->outertext .= $hiddenspans;
+                $last = $body->lastChild();
+                if ($last !== null) {
+                    $last->outertext .= $hiddenspans;
+                } else {
+                    $body->innertext = $hiddenspans;
+                }
             }
         }
 
@@ -1038,12 +1043,23 @@ class tp_parser {
         $head = $this->html->find('head', 0);
         if ($this->edit_span_created) {
             if ($head != null) {
-                $head->lastChild()->outertext .= $this->added_header;
+                $last = $head->lastChild();
+                if ($last !== null) {
+                    $last->outertext .= $this->added_header;
+                } else {
+                    $head->innertext = $this->added_header;
+                }
             }
         }
         //exit;
         if ($head != null) {
-            $head->lastChild()->outertext .= "\n<meta name=\"translation-stats\" content='" . json_encode($this->stats) . "'/>";
+            $stats_meta = "\n<meta name=\"translation-stats\" content='" . json_encode($this->stats) . "'/>";
+            $last = $head->lastChild();
+            if ($last !== null) {
+                $last->outertext .= $stats_meta;
+            } else {
+                $head->innertext = $stats_meta;
+            }
         }
         // we make sure that the result is clear from our shananigans
         return str_replace(array(TP_GTXT_BRK, TP_GTXT_IBRK, TP_GTXT_BRK_CLOSER, TP_GTXT_IBRK_CLOSER,

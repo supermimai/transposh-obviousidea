@@ -67,6 +67,11 @@ included. The stable tag in readme.txt remains 1.0.14.
 The earlier [1.0.14 development snapshot and checksums](packages/README.md)
 remain available for reproducing the original validation.
 
+For country-personalized purchase pages, see the
+[cacheable shop shell and private-fragment experiment](docs/shop-fragments-2026-10-26.md).
+It separates site-specific commerce work from the generic empty-container
+parser correction and documents the measurements and remaining release checks.
+
 1. Upload the plugin to the /wp-content/plugins/ directory.
 2. Activate the plugin from the **'Plugins'** menu in your WordPress dashboard.
 3. Go to the **'Widgets'** section and add the Transposh widget to your sidebar. Choose your preferred display interface.
