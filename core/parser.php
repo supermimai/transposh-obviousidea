@@ -1025,7 +1025,7 @@ class tp_parser {
                 if ($last !== null) {
                     $last->outertext .= $hiddenspans;
                 } else {
-                    $body->innertext = $hiddenspans;
+                    $body->innertext .= $hiddenspans;
                 }
             }
         }

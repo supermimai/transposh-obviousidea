@@ -33,6 +33,8 @@ function transposh_test_parser_fragments($parser_class = 'tp_parser') {
     $checks['empty_head_and_body'] = strpos($html, 'translation-stats') !== false;
     $html = $render('<html><head><title>Example</title></head><body></body></html>', 'fr', true);
     $checks['empty_body_editing_hidden_spans'] = strpos($html, 'Exemple') !== false && strpos($html, '<body>') !== false;
+    $html = $render('<html><head><title>Example</title></head><body>Hello</body></html>', 'fr', true);
+    $checks['text_only_body_retained_with_editing_spans'] = strpos($html, 'Bonjour') !== false && strpos($html, 'Exemple') !== false;
     $html = $render('<div><p>Hello</p></div>');
     $checks['headless_fragment_translation'] = strpos($html, 'Bonjour') !== false;
     $checks['headless_fragment_no_injected_document'] = strpos($html, '<head') === false && strpos($html, '<html') === false;

@@ -44,7 +44,7 @@ three matched. Only `transposh.php`, `core/parser.php` and
 `wp/transposh_db.php` were replaced, with syntax checks, expected-hash guards,
 atomic replacement and targeted OPcache invalidation for the mirror paths.
 
-**81 plugin assertions passed**: 45 focused parser/write-path/routing assertions,
+**82 plugin assertions passed**: 46 focused parser/write-path/routing assertions,
 25 existing cache regressions, and 11 translation compatibility assertions.
 The installed classes were retested after replacement.
 
@@ -62,8 +62,10 @@ The installed classes were retested after replacement.
   written or deleted, no real page purge was triggered by the mock writes,
   and no translation backup or email was sent**. They validate the method's
   decisions, not database storage under a live editor session.
-- Empty heads, whitespace/comment-only heads, an additional header, empty JSON
-  input, headless fragments, RTL, normal output, scripts and styles were checked.
+- Empty heads, whitespace/comment-only heads, an additional header, a text-only
+  body with editing spans, empty JSON input, headless fragments, RTL, normal
+  output, scripts and styles were checked. Appending hidden editing spans also
+  preserves pre-existing text in a body without child elements.
 
 The temporary administrator-only validation helper was deactivated afterward.
 The corrections do not call or depend on it.
